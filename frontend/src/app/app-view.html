@@ -78,10 +78,54 @@
             </label>
           </div>
 
+          <div class="document-intake">
+            <label class="field" for="source-documents">
+              <span>Source documents <small>local extraction</small></span>
+              <input #documentInput id="source-documents" type="file" multiple
+                accept=".pdf,.xlsx,.csv,.dxf,.png,.jpg,.jpeg" (change)="onFilesSelected($event)" />
+            </label>
+            <p class="upload-note">PDF text, XLSX, CSV, and DXF text labels are extracted by the local backend. Scanned pages/photos require manual transcription; DWG is not supported. Originals are not retained by the app or sent to external services.</p>
+            @if (selectedFiles().length) {
+              <div class="selected-files">
+                @for (file of selectedFiles(); track file.name + file.size) {
+                  <span>{{ file.name }} <small>{{ (file.size / 1024 / 1024).toFixed(1) }} MB</small></span>
+                }
+              </div>
+            }
+            <button class="text-button extract-button" type="button" [disabled]="!selectedFiles().length || extracting()" (click)="extractDocuments()">
+              {{ extracting() ? 'Extracting locally…' : 'Extract text for review' }}
+            </button>
+            @if (documentExtractions().length) {
+              <div class="document-previews">
+                @for (item of documentExtractions(); track item.filename; let index = $index) {
+                  <details class="document-preview" open>
+                    <summary>
+                      <strong>{{ item.filename }}</strong>
+                      <span [class.manual-status]="item.status !== 'text_extracted'">{{ statusLabel(item.status) }}</span>
+                    </summary>
+                    <p>{{ item.source_note }}</p>
+                    <label class="field" [for]="'document-text-' + index">
+                      <span>Editable extracted text / technician transcription</span>
+                      <textarea [id]="'document-text-' + index" rows="5" [value]="item.extracted_text"
+                        (input)="updateExtractedText(index, $event)"
+                        placeholder="Verify the source and enter technician-corrected text here."></textarea>
+                    </label>
+                  </details>
+                }
+              </div>
+            }
+          </div>
+
           <label class="field text-field" for="components">
             <span>Existing components and tags</span>
             <textarea id="components" name="components" rows="3" [(ngModel)]="form.observedComponentsText"
               placeholder="One observed component per line, e.g. V1 - valve manifold"></textarea>
+          </label>
+
+          <label class="field text-field" for="legacy-parts">
+            <span>Legacy part numbers <small>exact local lookup</small></span>
+            <textarea id="legacy-parts" name="legacyParts" rows="2" [(ngModel)]="form.legacyPartNumbersText"
+              placeholder="One exact part number per line"></textarea>
           </label>
 
           <label class="field text-field" for="unknowns">
@@ -160,12 +204,68 @@
               </div>
             }
 
+            @if (assessment.reference_lookups.length) {
+              <div class="result-block reference-block">
+                <h3>Historical source lookup</h3>
+                <p class="reference-intro">Exact part-number lookup. Alternatives below are listed in the source workbook, not compatibility approvals.</p>
+                @if (assessment.reference_data_status !== 'loaded') {
+                  <p class="reference-state">Reference data status: {{ assessment.reference_data_status }}</p>
+                }
+                @for (lookup of assessment.reference_lookups; track lookup.query) {
+                  <div class="reference-query">
+                    <div class="reference-query-heading">
+                      <strong>{{ lookup.query }}</strong>
+                      <span>{{ lookup.found ? 'SOURCE ROW FOUND' : 'NO EXACT ENTRY' }}</span>
+                    </div>
+                    @if (lookup.found) {
+                      @for (record of lookup.records; track record.source_file + record.source_row) {
+                        <div class="reference-record">
+                          <p class="reference-family">{{ record.family_or_function || record.legacy_description || 'Reference row' }}</p>
+                          <p class="reference-source">Source: {{ record.source_file }}, {{ record.source_sheet }}, row {{ record.source_row }}</p>
+                          @if (record.source_status || record.source_comment) {
+                            <p class="reference-source">Unverified workbook fields: {{ record.source_status || 'not stated' }}<span>{{ record.source_comment ? ' · ' + record.source_comment : '' }}</span></p>
+                          }
+                          @if (record.technical_context['pilot_air_supply'] || record.technical_context['plug_socket'] || record.technical_context['voltage'] || record.technical_context['connection']) {
+                            <p class="reference-source">{{ record.technical_context['pilot_air_supply'] || '' }}{{ record.technical_context['plug_socket'] ? ' · ' + record.technical_context['plug_socket'] : '' }}{{ record.technical_context['voltage'] ? ' · ' + record.technical_context['voltage'] : '' }}{{ record.technical_context['connection'] ? ' · ' + record.technical_context['connection'] : '' }}</p>
+                          }
+                          @if (record.candidates.length) {
+                            <p class="reference-source">Alternatives listed in source</p>
+                            <ul class="reference-candidates">
+                              @for (candidate of record.candidates; track candidate.part_number + candidate.product_type) {
+                                <li><strong>{{ candidate.part_number }}</strong><span>{{ candidate.product_type || 'Part type not stated' }}</span><small>{{ candidate.note || 'Source contains no candidate note.' }}</small></li>
+                              }
+                            </ul>
+                          } @else {
+                            <p class="reference-source">No alternative part number is listed in this row.</p>
+                          }
+                          <p class="reference-warning">{{ record.review_notice }}</p>
+                        </div>
+                      }
+                    } @else {
+                      <p class="reference-source">No exact legacy part number was found. No similar-part guess was made.</p>
+                    }
+                  </div>
+                }
+              </div>
+            }
+
             @if (assessment.known_unknowns.length) {
               <div class="result-block">
                 <h3>Recorded unknowns</h3>
                 <ul class="plain-list">
                   @for (item of assessment.known_unknowns; track $index) {
                     <li>{{ item }}</li>
+                  }
+                </ul>
+              </div>
+            }
+
+            @if (assessment.source_documents.length) {
+              <div class="result-block">
+                <h3>Source documents</h3>
+                <ul class="plain-list document-status-list">
+                  @for (source of assessment.source_documents; track source.filename) {
+                    <li><strong>{{ source.filename }}</strong> · {{ statusLabel(source.status) }}. {{ source.source_note }}</li>
                   }
                 </ul>
               </div>
@@ -192,6 +292,9 @@
                 <p>Estimated cost difference: INR {{ roi.estimated_cost_savings_inr }}</p>
               </div>
             }
+            <button class="download-button" type="button" (click)="downloadReviewPacket()">
+              <span aria-hidden="true">↓</span> Download engineer review packet
+            </button>
           </div>
         } @else {
           <div class="empty-result">
