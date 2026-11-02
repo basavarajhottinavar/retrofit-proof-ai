@@ -1,0 +1,215 @@
+<div class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="RetrofitProof AI home">
+      <span class="brand-mark" aria-hidden="true">RP</span>
+      <span>RetrofitProof <b>AI</b></span>
+    </a>
+    <div class="topbar-meta">
+      <span class="environment"><span class="status-dot"></span> LOCAL WORKSPACE</span>
+      <span class="topbar-divider" aria-hidden="true"></span>
+      <span class="operator-label">Engineering intake</span>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="page-heading" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">BROWNFIELDS / PNEUMATIC MIGRATION</p>
+        <h1 id="page-title">Retrofit intake</h1>
+        <p class="page-description">Capture the as-built picture before evaluating a migration scope.</p>
+      </div>
+      <div class="review-stamp">
+        <span class="stamp-label">DECISION STATUS</span>
+        <strong>Engineer review required</strong>
+      </div>
+    </section>
+
+    <div class="work-grid">
+      <section class="intake-section" aria-labelledby="intake-title">
+        <div class="section-heading">
+          <div>
+            <span class="section-index">01</span>
+            <h2 id="intake-title">Project information</h2>
+          </div>
+          <span class="required-note"><span aria-hidden="true">*</span> Required</span>
+        </div>
+
+        <form (ngSubmit)="runAssessment()" #assessmentForm="ngForm">
+          <div class="field-grid">
+            <label class="field field-wide" for="project-name">
+              <span>Project name <span class="required-mark">*</span></span>
+              <input id="project-name" name="projectName" type="text" required maxlength="120"
+                [(ngModel)]="form.projectName" placeholder="e.g. Line 4 valve refresh" />
+            </label>
+
+            <label class="field field-wide" for="application">
+              <span>Machine / application <span class="required-mark">*</span></span>
+              <input id="application" name="application" type="text" required maxlength="200"
+                [(ngModel)]="form.application" placeholder="What does the machine do?" />
+            </label>
+
+            <label class="field" for="pressure">
+              <span>Operating pressure <small>bar</small></span>
+              <input id="pressure" name="pressure" type="number" min="0.01" step="0.1"
+                [(ngModel)]="form.operatingPressureBar" placeholder="Not confirmed" />
+            </label>
+
+            <label class="field" for="cycle-rate">
+              <span>Target cycle rate <small>cycles / min</small></span>
+              <input id="cycle-rate" name="cycleRate" type="number" min="0.01" step="0.1"
+                [(ngModel)]="form.targetCycleRatePerMin" placeholder="Not confirmed" />
+            </label>
+          </div>
+
+          <div class="section-heading subsection-heading">
+            <div>
+              <span class="section-index">02</span>
+              <h2>As-built evidence</h2>
+            </div>
+          </div>
+          <div class="evidence-row">
+            <label class="check-field" for="diagram-available">
+              <input id="diagram-available" name="diagramAvailable" type="checkbox" [(ngModel)]="form.diagramAvailable" />
+              <span class="check-copy"><strong>Pneumatic diagram</strong><small>Available and reviewed</small></span>
+            </label>
+            <label class="check-field" for="io-available">
+              <input id="io-available" name="ioListAvailable" type="checkbox" [(ngModel)]="form.ioListAvailable" />
+              <span class="check-copy"><strong>I/O list</strong><small>Available and reviewed</small></span>
+            </label>
+          </div>
+
+          <label class="field text-field" for="components">
+            <span>Existing components and tags</span>
+            <textarea id="components" name="components" rows="3" [(ngModel)]="form.observedComponentsText"
+              placeholder="One observed component per line, e.g. V1 - valve manifold"></textarea>
+          </label>
+
+          <label class="field text-field" for="unknowns">
+            <span>Known unknowns / assumptions</span>
+            <textarea id="unknowns" name="unknowns" rows="2" [(ngModel)]="form.knownUnknownsText"
+              placeholder="One item per line. Record anything that needs technician confirmation."></textarea>
+          </label>
+
+          <details class="roi-details">
+            <summary><span>Optional</span> Quote-effort baseline for an indicative ROI</summary>
+            <p>Enter measured estimates only. The result is a simple comparison, not a guaranteed saving.</p>
+            <div class="field-grid roi-grid">
+              <label class="field" for="current-hours">
+                <span>Current quote effort <small>hours</small></span>
+                <input id="current-hours" name="currentHours" type="number" min="0" step="0.5"
+                  [(ngModel)]="form.currentQuoteHours" placeholder="Optional" />
+              </label>
+              <label class="field" for="estimated-hours">
+                <span>Estimated effort <small>hours</small></span>
+                <input id="estimated-hours" name="estimatedHours" type="number" min="0" step="0.5"
+                  [(ngModel)]="form.estimatedQuoteHours" placeholder="Optional" />
+              </label>
+              <label class="field field-wide" for="hourly-cost">
+                <span>Engineering cost <small>INR / hour</small></span>
+                <input id="hourly-cost" name="hourlyCost" type="number" min="0" step="50"
+                  [(ngModel)]="form.engineeringHourlyCostInr" placeholder="Optional" />
+              </label>
+            </div>
+          </details>
+
+          @if (errorMessage()) {
+            <p class="error-message" role="alert">{{ errorMessage() }}</p>
+          }
+
+          <div class="form-actions">
+            <button class="primary-button" type="submit" [disabled]="!assessmentForm.form.valid || submitting()">
+              {{ submitting() ? 'Assessing…' : 'Review intake' }}
+              <span aria-hidden="true">→</span>
+            </button>
+            <button class="text-button" type="button" (click)="loadSample()">Load demo data</button>
+            <button class="reset-button" type="button" (click)="resetForm()">Reset</button>
+          </div>
+          <p class="demo-note">Demo values are illustrative. Replace them with approved case data.</p>
+        </form>
+      </section>
+
+      <aside class="results-section" aria-labelledby="results-title" aria-live="polite">
+        <div class="section-heading result-heading">
+          <div>
+            <span class="section-index">03</span>
+            <h2 id="results-title">Assessment output</h2>
+          </div>
+          @if (result(); as assessment) {
+            <span class="result-id">{{ assessment.assessment_id.slice(0, 8) }}</span>
+          }
+        </div>
+
+        @if (result(); as assessment) {
+          <div class="result-content">
+            <div class="result-status" [class.incomplete]="assessment.status === 'information_incomplete'">
+              <span class="status-dot"></span>
+              <div>
+                <strong>{{ assessment.status === 'information_incomplete' ? 'Information incomplete' : 'Ready for engineer review' }}</strong>
+                <p>{{ assessment.summary }}</p>
+              </div>
+            </div>
+
+            @if (assessment.missing_information.length) {
+              <div class="result-block">
+                <h3>Information to collect <span>{{ assessment.missing_information.length }}</span></h3>
+                <ul class="plain-list missing-list">
+                  @for (item of assessment.missing_information; track item) {
+                    <li>{{ item }}</li>
+                  }
+                </ul>
+              </div>
+            }
+
+            @if (assessment.known_unknowns.length) {
+              <div class="result-block">
+                <h3>Recorded unknowns</h3>
+                <ul class="plain-list">
+                  @for (item of assessment.known_unknowns; track $index) {
+                    <li>{{ item }}</li>
+                  }
+                </ul>
+              </div>
+            }
+
+            <div class="result-block">
+              <h3>Engineer review checklist</h3>
+              <ul class="plain-list checklist">
+                @for (item of assessment.review_checklist; track item) {
+                  <li>{{ item }}</li>
+                }
+              </ul>
+            </div>
+
+            <div class="bom-notice">
+              <div class="bom-topline"><span>BOM / substitution</span><strong>Not generated</strong></div>
+              <p>{{ assessment.bom_note }}</p>
+            </div>
+
+            @if (assessment.roi_estimate; as roi) {
+              <div class="roi-result">
+                <span>Indicative engineering effort difference</span>
+                <strong>{{ roi.engineering_hours_saved }} <small>hours</small></strong>
+                <p>Estimated cost difference: INR {{ roi.estimated_cost_savings_inr }}</p>
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="empty-result">
+            <div class="empty-rule" aria-hidden="true"><span></span><span></span><span></span></div>
+            <p class="empty-kicker">NO ASSESSMENT RUN</p>
+            <p>Submit the intake to see missing information and the engineer review checklist.</p>
+            <div class="guardrail-note">
+              <span class="guardrail-mark" aria-hidden="true">!</span>
+              <p>Outputs are review aids only. This tool does not approve designs, select safety components, or authorize commissioning.</p>
+            </div>
+          </div>
+        }
+      </aside>
+    </div>
+
+    <footer class="workspace-footer">
+      <span>RETROFITPROOF AI <span class="footer-separator">/</span> LOCAL DEMO</span>
+      <span>Engineering sign-off required for all retrofit decisions</span>
+    </footer>
+  </main>
+</div>
