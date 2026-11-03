@@ -92,6 +92,21 @@
                 }
               </div>
             }
+            @if (localDiagramPreviews().length) {
+              <div class="local-diagram-previews">
+                <p class="preview-heading">Original drawing preview <small>local browser view</small></p>
+                @for (preview of localDiagramPreviews(); track preview.objectUrl) {
+                  <figure class="local-diagram-preview">
+                    <figcaption>{{ preview.filename }}</figcaption>
+                    @if (preview.kind === 'pdf') {
+                      <a class="open-original-pdf" [href]="preview.objectUrl" target="_blank" rel="noopener noreferrer">Open original PDF in a new tab <span aria-hidden="true">↗</span></a>
+                    } @else {
+                      <img [src]="preview.objectUrl" [alt]="'Original drawing: ' + preview.filename" />
+                    }
+                  </figure>
+                }
+              </div>
+            }
             <button class="text-button extract-button" type="button" [disabled]="!selectedFiles().length || extracting()" (click)="extractDocuments()">
               {{ extracting() ? 'Extracting locally…' : 'Extract text for review' }}
             </button>
@@ -126,6 +141,14 @@
             <span>Legacy part numbers <small>exact local lookup</small></span>
             <textarea id="legacy-parts" name="legacyParts" rows="2" [(ngModel)]="form.legacyPartNumbersText"
               placeholder="One exact part number per line"></textarea>
+          </label>
+
+          <label class="field text-field" for="legacy-component-names">
+            <span>Legacy component names <small>local description lookup</small></span>
+            <textarea id="legacy-component-names" name="legacyComponentNames" rows="2"
+              [(ngModel)]="form.legacyComponentNamesText"
+              placeholder="e.g. Filter regulator, pressure gauge"></textarea>
+            <small class="field-help">Searches exact names or description phrases in local project crosswalks. Part numbers entered above are also checked there. No fuzzy guessing.</small>
           </label>
 
           <label class="field text-field" for="unknowns">
@@ -185,6 +208,18 @@
 
         @if (result(); as assessment) {
           <div class="result-content">
+            <div class="result-block">
+              <h3>AI-assisted engineering review</h3>
+              <p>{{ assessment.ai_review.summary }}</p>
+              @if (assessment.ai_review.risks.length) {
+                <ul class="plain-list checklist">
+                  @for (risk of assessment.ai_review.risks; track $index) {
+                    <li>{{ risk }}</li>
+                  }
+                </ul>
+              }
+              <p class="reference-state">{{ assessment.ai_review.enabled ? assessment.ai_review.provider + ' assisted' : assessment.ai_review.provider }} · Review aid only; no engineering approval.</p>
+            </div>
             <div class="result-status" [class.incomplete]="assessment.status === 'information_incomplete'">
               <span class="status-dot"></span>
               <div>
@@ -206,8 +241,8 @@
 
             @if (assessment.reference_lookups.length) {
               <div class="result-block reference-block">
-                <h3>Historical source lookup</h3>
-                <p class="reference-intro">Exact part-number lookup. Alternatives below are listed in the source workbook, not compatibility approvals.</p>
+                <h3>General part-number references</h3>
+                <p class="reference-intro">Exact lookup in the valve and cylinder reference lists. Project-specific matches are shown in the crosswalk section below.</p>
                 @if (assessment.reference_data_status !== 'loaded') {
                   <p class="reference-state">Reference data status: {{ assessment.reference_data_status }}</p>
                 }
@@ -221,10 +256,6 @@
                       @for (record of lookup.records; track record.source_file + record.source_row) {
                         <div class="reference-record">
                           <p class="reference-family">{{ record.family_or_function || record.legacy_description || 'Reference row' }}</p>
-                          <p class="reference-source">Source: {{ record.source_file }}, {{ record.source_sheet }}, row {{ record.source_row }}</p>
-                          @if (record.source_status || record.source_comment) {
-                            <p class="reference-source">Unverified workbook fields: {{ record.source_status || 'not stated' }}<span>{{ record.source_comment ? ' · ' + record.source_comment : '' }}</span></p>
-                          }
                           @if (record.technical_context['pilot_air_supply'] || record.technical_context['plug_socket'] || record.technical_context['voltage'] || record.technical_context['connection']) {
                             <p class="reference-source">{{ record.technical_context['pilot_air_supply'] || '' }}{{ record.technical_context['plug_socket'] ? ' · ' + record.technical_context['plug_socket'] : '' }}{{ record.technical_context['voltage'] ? ' · ' + record.technical_context['voltage'] : '' }}{{ record.technical_context['connection'] ? ' · ' + record.technical_context['connection'] : '' }}</p>
                           }
@@ -249,6 +280,54 @@
               </div>
             }
 
+            @if (assessment.component_name_lookups.length) {
+              <div class="result-block reference-block">
+                <h3>Project crosswalk lookup</h3>
+                <p class="reference-intro">Checks part numbers entered above and exact component-name or description phrases against local project crosswalks. These are source references, not compatibility approvals.</p>
+                @for (lookup of assessment.component_name_lookups; track lookup.query) {
+                  <div class="reference-query">
+                    <div class="reference-query-heading">
+                      <strong>{{ lookup.query }}</strong>
+                      <span>{{ lookup.status === 'matched' ? 'SOURCE MATCHES' : lookup.status === 'no_match' ? 'NO NAME MATCH' : 'DATA UNAVAILABLE' }}</span>
+                    </div>
+                    @if (lookup.matches_truncated) {
+                      <p class="reference-state">Showing the first 50 matching rows. Refine the name to narrow the results.</p>
+                    }
+                    @if (lookup.matches.length) {
+                      @for (match of lookup.matches; track match.source_file + match.source_row) {
+                        <div class="reference-record">
+                          <p class="reference-family">{{ match.description || 'No description' }}</p>
+                          <p class="reference-source">Legacy code: {{ match.legacy_part_number || 'not listed' }} · {{ match.competitor || 'manufacturer unknown' }}</p>
+                          <div class="bom-notice">
+                            <div class="bom-topline"><span>Festo reference from source</span><strong>{{ statusLabel(match.reference_status) }}</strong></div>
+                            <p>{{ match.festo_part_number || 'No part number listed' }}{{ match.festo_type_code ? ' · ' + match.festo_type_code : '' }}</p>
+                          </div>
+                          @if (match.source_remarks) {
+                            <p class="reference-warning">{{ match.source_remarks }}</p>
+                          }
+                          @if (match.official_festo_product; as product) {
+                            <details class="official-product-facts">
+                              <summary>Official Festo facts · {{ product.product_name }}</summary>
+                              <dl>
+                                @for (fact of product.technical_data | keyvalue; track fact.key) {
+                                  <div><dt>{{ fact.key.replaceAll('_', ' ') }}</dt><dd>{{ fact.value }}</dd></div>
+                                }
+                              </dl>
+                              <p>{{ product.source_region }}. Retrieved {{ product.retrieved_on }}. Availability and compatibility are not verified for this application.</p>
+                              <div class="official-links"><a [href]="product.product_page" target="_blank" rel="noreferrer">Festo product page</a><a [href]="product.datasheet" target="_blank" rel="noreferrer">Festo datasheet</a></div>
+                            </details>
+                          }
+                          <p class="reference-warning">{{ match.review_notice }}</p>
+                        </div>
+                      }
+                    } @else {
+                      <p class="reference-source">No exact name or description phrase was found in the local crosswalks.</p>
+                    }
+                  </div>
+                }
+              </div>
+            }
+
             @if (assessment.known_unknowns.length) {
               <div class="result-block">
                 <h3>Recorded unknowns</h3>
@@ -260,15 +339,48 @@
               </div>
             }
 
-            @if (assessment.source_documents.length) {
-              <div class="result-block">
-                <h3>Source documents</h3>
-                <ul class="plain-list document-status-list">
-                  @for (source of assessment.source_documents; track source.filename) {
-                    <li><strong>{{ source.filename }}</strong> · {{ statusLabel(source.status) }}. {{ source.source_note }}</li>
+            @for (source of assessment.source_documents; track source.filename) {
+              @if (source.project_reconciliation; as reconciliation) {
+                <div class="result-block">
+                  <p class="reference-warning">{{ reconciliation.review_notice }}</p>
+                  @if (!reconciliation.source_signoff_present) {
+                    <p class="reference-state">The source workbook has no recorded sign-off. Every line requires engineer review.</p>
                   }
-                </ul>
-              </div>
+                  @if (reconciliation.records.length) {
+                    <details class="reference-query">
+                      <summary>Review all {{ reconciliation.records.length }} source lines</summary>
+                      @for (record of reconciliation.records; track record.source_row) {
+                        <div class="reference-record">
+                          <div class="reference-query-heading">
+                            <strong>{{ record.legacy_part_number || 'No legacy code' }}</strong>
+                            <span>{{ statusLabel(record.diagram_match_status) }}</span>
+                          </div>
+                          <p class="reference-source">{{ record.description || 'No description' }} · {{ record.competitor || 'Manufacturer unknown' }}</p>
+                          <p class="reference-source">Festo reference: {{ record.festo_part_number || 'No part number listed' }}{{ record.festo_type_code ? ' · ' + record.festo_type_code : '' }} · {{ statusLabel(record.reference_status) }}</p>
+                          @if (record.source_remarks) {
+                            <p class="reference-warning">{{ record.source_remarks }}</p>
+                          }
+                          @if (record.found_in_crt_source_value) {
+                            <p class="reference-source">Raw FoundinCRT value: {{ record.found_in_crt_source_value }} (not sign-off)</p>
+                          }
+                          @if (record.official_festo_product; as product) {
+                            <details class="official-product-facts">
+                              <summary>Official Festo product facts · {{ product.product_name }}</summary>
+                              <dl>
+                                @for (fact of product.technical_data | keyvalue; track fact.key) {
+                                  <div><dt>{{ fact.key.replaceAll('_', ' ') }}</dt><dd>{{ fact.value }}</dd></div>
+                                }
+                              </dl>
+                              <p>{{ product.source_region }}. Retrieved {{ product.retrieved_on }}. Availability and compatibility are not verified for this application.</p>
+                              <div class="official-links"><a [href]="product.product_page" target="_blank" rel="noreferrer">Festo product page</a><a [href]="product.datasheet" target="_blank" rel="noreferrer">Festo datasheet</a></div>
+                            </details>
+                          }
+                        </div>
+                      }
+                    </details>
+                  }
+                </div>
+              }
             }
 
             <div class="result-block">
@@ -280,9 +392,47 @@
               </ul>
             </div>
 
-            <div class="bom-notice">
-              <div class="bom-topline"><span>BOM / substitution</span><strong>Not generated</strong></div>
+            <div class="result-block">
+              <h3>Candidate BOM <span>{{ assessment.bom_preview.length }}</span></h3>
+              @if (assessment.bom_preview.length) {
+                <ul class="plain-list checklist">
+                  @for (item of assessment.bom_preview; track $index) {
+                    <li>
+                      <strong>{{ item.legacy_part_number || 'Legacy item' }}</strong>
+                      -> {{ item.festo_part_number || 'Festo equivalent pending' }}{{ item.festo_type_code ? ' · ' + item.festo_type_code : '' }}
+                      · Qty {{ item.quantity }} · Engineer review required
+                    </li>
+                  }
+                </ul>
+              } @else {
+                <p>No legacy-to-Festo candidates are available for this intake.</p>
+              }
+              <button class="download-button" type="button" (click)="downloadBomExcel()">
+                <span aria-hidden="true">↓</span> Download candidate BOM
+              </button>
               <p>{{ assessment.bom_note }}</p>
+            </div>
+
+            <div class="result-block">
+              <h3>FAT / SAT validation plan <span>{{ assessment.validation_tests.length }}</span></h3>
+              @for (test of assessment.validation_tests; track test.test_id) {
+                <div class="reference-record">
+                  <strong>{{ test.phase }} · {{ test.test_id }} · {{ test.title }}</strong>
+                  <p>{{ test.acceptance_criteria }}</p>
+                  <p class="reference-warning">{{ test.safety_note }}</p>
+                </div>
+              }
+              <button class="download-button" type="button" (click)="downloadValidationExcel()">
+                <span aria-hidden="true">↓</span> Download FAT / SAT validation plan
+              </button>
+            </div>
+
+            <div class="result-block">
+              <h3>Engineer sign-off</h3>
+              <p>Review status: <strong>{{ statusLabel(engineerSignoff()) }}</strong></p>
+              <button class="text-button" type="button" (click)="engineerSignoff.set('reviewed')" [disabled]="engineerSignoff() === 'approved'">Mark reviewed</button>
+              <button class="download-button" type="button" (click)="engineerSignoff.set('approved')">Record approval</button>
+              <p class="reference-warning">Approval in this demo is a local review status only and does not represent engineering authorization.</p>
             </div>
 
             @if (assessment.roi_estimate; as roi) {
@@ -293,7 +443,10 @@
               </div>
             }
             <button class="download-button" type="button" (click)="downloadReviewPacket()">
-              <span aria-hidden="true">↓</span> Download engineer review packet
+              <span aria-hidden="true">↓</span> Download engineer review packet (JSON)
+            </button>
+            <button class="download-button" type="button" (click)="downloadReviewExcel()">
+              <span aria-hidden="true">↓</span> Download legacy and Festo equivalents (Excel)
             </button>
           </div>
         } @else {

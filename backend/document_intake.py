@@ -7,6 +7,7 @@ from zipfile import BadZipFile, ZipFile
 import ezdxf
 from pypdf import PdfReader
 from openpyxl import load_workbook
+from project_reconciliation import reconcile_project
 
 MAX_DOCUMENT_BYTES = 12 * 1024 * 1024
 MAX_DOCUMENT_COUNT = 8
@@ -82,13 +83,17 @@ def _extract_pdf(filename: str, extension: str, content: bytes) -> dict[str, Any
         "Text-layer extraction only. Verify each value against the original drawing; "
         "scanned pages and symbols are not interpreted."
     )
-    return _bounded_result(
+    result = _bounded_result(
         filename,
         extension,
         "\n\n".join(page_text),
         note,
         {"page_count": len(reader.pages), "pages_scanned": min(len(reader.pages), 100)},
     )
+    reconciliation = reconcile_project(filename, result["extracted_text"])
+    if reconciliation is not None:
+        result["metadata"]["project_reconciliation"] = reconciliation
+    return result
 
 
 def _extract_xlsx(filename: str, extension: str, content: bytes) -> dict[str, Any]:

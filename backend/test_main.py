@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from pydantic import ValidationError
 
@@ -49,6 +50,32 @@ class AssessmentTests(unittest.TestCase):
                 application="Case packer",
                 operating_pressure_bar=0,
             )
+
+    def test_part_numbers_and_names_both_reach_project_crosswalk_lookup(self):
+        expected_lookups = [
+            {
+                "query": "KQ2T16-00A",
+                "status": "matched",
+                "matches_truncated": False,
+                "matches": [],
+                "review_notice": "Exact local crosswalk lookup.",
+            }
+        ]
+        with patch("main.lookup_project_component_names", return_value=expected_lookups) as lookup:
+            response = assess_request(
+                AssessmentRequest(
+                    project_name="Project RetrofitProof AI",
+                    application="Pneumatic component lookup",
+                    legacy_part_numbers=["KQ2T16-00A"],
+                    legacy_component_names=["Push-in T-connector"],
+                )
+            )
+
+        lookup.assert_called_once_with(["KQ2T16-00A", "Push-in T-connector"])
+        self.assertEqual(
+            [item.model_dump() for item in response.component_name_lookups],
+            expected_lookups,
+        )
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
-import { Component, ElementRef, signal, ViewChild } from '@angular/core';
+import { Component, ElementRef, OnDestroy, signal, ViewChild } from '@angular/core';
+import { KeyValuePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 interface AssessmentForm {
@@ -10,6 +11,7 @@ interface AssessmentForm {
   ioListAvailable: boolean;
   observedComponentsText: string;
   legacyPartNumbersText: string;
+  legacyComponentNamesText: string;
   knownUnknownsText: string;
   currentQuoteHours: number | null;
   estimatedQuoteHours: number | null;
@@ -43,6 +45,32 @@ interface ReferenceLookup {
   review_notice: string;
 }
 
+interface ComponentNameMatch {
+  project_id: string | null;
+  source_file: string;
+  source_sheet: string;
+  source_row: number;
+  drawing_item: number | null;
+  legacy_part_number: string | null;
+  description: string | null;
+  competitor: string | null;
+  festo_part_number: string | null;
+  festo_type_code: string | null;
+  source_remarks: string | null;
+  reference_status: string;
+  match_type: 'exact_part_number' | 'exact_component_name' | 'description_phrase';
+  official_festo_product: OfficialFestoProduct | null;
+  review_notice: string;
+}
+
+interface ComponentNameLookup {
+  query: string;
+  status: 'matched' | 'no_match' | 'not_available';
+  matches_truncated: boolean;
+  matches: ComponentNameMatch[];
+  review_notice: string;
+}
+
 interface AssessmentResponse {
   assessment_id: string;
   status: 'information_incomplete' | 'awaiting_engineer_review';
@@ -52,6 +80,7 @@ interface AssessmentResponse {
   known_unknowns: string[];
   reference_data_status: 'loaded' | 'partially_loaded' | 'not_available';
   reference_lookups: ReferenceLookup[];
+  component_name_lookups: ComponentNameLookup[];
   source_documents: SourceDocumentSummary[];
   review_checklist: string[];
   bom_status: 'not_generated';
@@ -60,6 +89,87 @@ interface AssessmentResponse {
     engineering_hours_saved: number;
     estimated_cost_savings_inr: number;
   } | null;
+  bom_preview: BomPreviewItem[];
+  validation_tests: ValidationTest[];
+  ai_review: AiReview;
+}
+
+interface AiReview {
+  enabled: boolean;
+  provider: string;
+  summary: string;
+  risks: string[];
+}
+
+interface BomPreviewItem {
+  legacy_part_number: string | null;
+  description: string | null;
+  festo_part_number: string | null;
+  festo_type_code: string | null;
+  quantity: number;
+  review_status: string;
+  disposition: 'engineer_review_required';
+}
+
+interface ValidationTest {
+  phase: 'FAT' | 'SAT';
+  test_id: string;
+  title: string;
+  acceptance_criteria: string;
+  safety_note: string;
+}
+
+interface ProjectReconciliationRecord {
+  source_row: number;
+  drawing_item: number | null;
+  legacy_part_number: string | null;
+  description: string | null;
+  competitor: string | null;
+  festo_part_number: string | null;
+  festo_type_code: string | null;
+  source_sign: string | null;
+  source_signoff_present: boolean;
+  found_in_crt_source_value: string | null;
+  source_remarks: string | null;
+  review_caveats: string[];
+  reference_status: string;
+  requires_engineer_review: true;
+  diagram_item_text: string | null;
+  diagram_match_status: string;
+  official_festo_product: OfficialFestoProduct | null;
+}
+
+interface OfficialFestoProduct {
+  part_number: string;
+  type_code: string;
+  product_name: string;
+  product_family: string;
+  technical_data: Record<string, string>;
+  product_page: string;
+  datasheet: string;
+  regional_availability: string;
+  compatibility_status: string;
+  dataset_source: string;
+  retrieved_on: string;
+  source_region: string;
+}
+
+interface LocalDiagramPreview {
+  filename: string;
+  kind: 'pdf' | 'image';
+  objectUrl: string;
+}
+
+interface ProjectReconciliation {
+  project_id: string | null;
+  status: string;
+  source_file: string;
+  source_sheet?: string | null;
+  source_signoff_present?: boolean;
+  total_source_lines?: number;
+  diagram_match_counts?: Record<string, number>;
+  records: ProjectReconciliationRecord[];
+  review_notice: string;
 }
 
 interface DocumentExtraction {
@@ -76,15 +186,16 @@ interface SourceDocumentSummary {
   file_type: string;
   status: DocumentExtraction['status'];
   source_note: string;
+  project_reconciliation?: ProjectReconciliation | null;
 }
 
 @Component({
-  imports: [FormsModule],
+  imports: [FormsModule, KeyValuePipe],
   selector: 'app-root',
   styleUrl: './app.scss',
   templateUrl: './app-view.html',
 })
-export class App {
+export class App implements OnDestroy {
   @ViewChild('documentInput') protected documentInput?: ElementRef<HTMLInputElement>;
 
   protected form: AssessmentForm = this.emptyForm();
@@ -93,7 +204,9 @@ export class App {
   protected readonly submitting = signal(false);
   protected readonly selectedFiles = signal<File[]>([]);
   protected readonly documentExtractions = signal<DocumentExtraction[]>([]);
+  protected readonly localDiagramPreviews = signal<LocalDiagramPreview[]>([]);
   protected readonly extracting = signal(false);
+  protected readonly engineerSignoff = signal<'review_required' | 'reviewed' | 'approved'>('review_required');
 
   protected async runAssessment(): Promise<void> {
     this.submitting.set(true);
@@ -108,12 +221,14 @@ export class App {
       io_list_available: this.form.ioListAvailable,
       observed_components: this.lines(this.form.observedComponentsText),
       legacy_part_numbers: this.lines(this.form.legacyPartNumbersText),
+      legacy_component_names: this.lines(this.form.legacyComponentNamesText),
       source_documents: this.documentExtractions().map((document) => ({
         filename: document.filename,
         file_type: document.file_type,
         status: document.status,
         extracted_text: document.extracted_text,
         source_note: document.source_note,
+        project_reconciliation: document.metadata['project_reconciliation'] as ProjectReconciliation | undefined,
       })),
       known_unknowns: this.lines(this.form.knownUnknownsText),
       current_quote_hours: this.form.currentQuoteHours,
@@ -150,7 +265,25 @@ export class App {
 
   protected onFilesSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.selectedFiles.set(Array.from(input.files ?? []));
+    const files = Array.from(input.files ?? []);
+    this.clearLocalDiagramPreviews();
+    this.selectedFiles.set(files);
+    this.localDiagramPreviews.set(
+      files
+        .flatMap((file): LocalDiagramPreview[] => {
+          const extension = file.name.toLowerCase().split('.').pop();
+          if (extension !== 'pdf' && !['png', 'jpg', 'jpeg'].includes(extension ?? '')) {
+            return [];
+          }
+          const objectUrl = URL.createObjectURL(file);
+          return [{
+            filename: file.name,
+            kind: extension === 'pdf' ? 'pdf' : 'image',
+            objectUrl,
+          }];
+        })
+        .slice(0, 4),
+    );
     this.documentExtractions.set([]);
     this.errorMessage.set('');
   }
@@ -208,6 +341,10 @@ export class App {
     return status.replaceAll('_', ' ');
   }
 
+  ngOnDestroy(): void {
+    this.clearLocalDiagramPreviews();
+  }
+
   protected downloadReviewPacket(): void {
     const assessment = this.result();
     if (!assessment) return;
@@ -225,9 +362,15 @@ export class App {
         io_list_available_and_reviewed: this.form.ioListAvailable,
         observed_components: this.lines(this.form.observedComponentsText),
         legacy_part_numbers: this.lines(this.form.legacyPartNumbersText),
+        legacy_component_names: this.lines(this.form.legacyComponentNamesText),
         known_unknowns: this.lines(this.form.knownUnknownsText),
       },
       source_documents: assessment.source_documents,
+      engineer_signoff: {
+        status: this.engineerSignoff(),
+        approved_by: '',
+        approved_at: '',
+      },
       assessment,
     };
     const blob = new Blob([JSON.stringify(packet, null, 2)], { type: 'application/json' });
@@ -242,6 +385,46 @@ export class App {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
+  protected async downloadReviewExcel(): Promise<void> {
+    await this.downloadAssessmentExcel('crosswalk', 'retrofit-legacy-festo');
+  }
+
+  protected async downloadBomExcel(): Promise<void> {
+    await this.downloadAssessmentExcel('bom', 'retrofit-candidate-bom');
+  }
+
+  protected async downloadValidationExcel(): Promise<void> {
+    await this.downloadAssessmentExcel('validation_tests', 'retrofit-fat-sat-plan');
+  }
+
+  protected async downloadAssessmentExcel(exportType: string, defaultName: string): Promise<void> {
+    const assessment = this.result();
+    if (!assessment) return;
+
+    try {
+      const response = await fetch('http://localhost:8000/assessments/export-xlsx', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assessment, export_type: exportType }),
+      });
+      if (!response.ok) {
+        throw new Error('Unable to generate the Excel crosswalk.');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      const projectSlug = this.form.projectName.replace(/[^a-z0-9-_]+/gi, '-').replace(/^-|-$/g, '') || 'assessment';
+      anchor.href = url;
+      anchor.download = `${defaultName}-${projectSlug}.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      this.errorMessage.set(error instanceof Error ? error.message : 'Unable to download the Excel crosswalk.');
+    }
+  }
+
   protected loadSample(): void {
     this.form = {
       projectName: 'Demo packaging line',
@@ -251,23 +434,34 @@ export class App {
       diagramAvailable: true,
       ioListAvailable: true,
       observedComponentsText: 'V1 - valve manifold\nCY1 - guided actuator',
-      legacyPartNumbersText: '',
+      legacyPartNumbersText: 'KQ2T16-00A',
+      legacyComponentNamesText: 'Push-in T-connector',
       knownUnknownsText: 'Confirm valve fail state from as-built machine',
       currentQuoteHours: 12,
       estimatedQuoteHours: 8,
       engineeringHourlyCostInr: 1200,
     };
     this.result.set(null);
+    this.engineerSignoff.set('review_required');
     this.errorMessage.set('');
   }
 
   protected resetForm(): void {
     this.form = this.emptyForm();
     this.result.set(null);
+    this.engineerSignoff.set('review_required');
     this.errorMessage.set('');
     this.selectedFiles.set([]);
     this.documentExtractions.set([]);
+    this.clearLocalDiagramPreviews();
     if (this.documentInput) this.documentInput.nativeElement.value = '';
+  }
+
+  private clearLocalDiagramPreviews(): void {
+    for (const preview of this.localDiagramPreviews()) {
+      URL.revokeObjectURL(preview.objectUrl);
+    }
+    this.localDiagramPreviews.set([]);
   }
 
   private emptyForm(): AssessmentForm {
@@ -280,6 +474,7 @@ export class App {
       ioListAvailable: false,
       observedComponentsText: '',
       legacyPartNumbersText: '',
+      legacyComponentNamesText: '',
       knownUnknownsText: '',
       currentQuoteHours: null,
       estimatedQuoteHours: null,

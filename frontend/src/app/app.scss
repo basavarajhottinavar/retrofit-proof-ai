@@ -44,6 +44,7 @@ h2 { margin: 0; font-size: 16px; font-weight: 680; }
 .field { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: #34413e; font-size: 12px; font-weight: 650; }
 .field-wide { grid-column: 1 / -1; }
 .field small { margin-left: 4px; color: var(--muted); font-size: 10px; font-weight: 500; }
+.field .field-help { margin: 0; color: var(--muted); font-size: 10px; font-weight: 450; line-height: 1.4; }
 .field input, .field textarea { width: 100%; min-width: 0; border: 1px solid #cbd4cf; border-radius: 3px; outline: 0; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; font-weight: 450; }
 .field input { height: 39px; padding: 0 11px; }
 .field textarea { padding: 10px 11px; resize: vertical; line-height: 1.45; }
@@ -72,6 +73,23 @@ h2 { margin: 0; font-size: 16px; font-weight: 680; }
 .document-preview summary .manual-status { color: var(--amber); }
 .document-preview > p { margin: 8px 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .document-status-list strong { color: #394742; }
+.local-diagram-previews { display: grid; gap: 10px; margin-top: 12px; }
+.preview-heading { margin: 0; color: #34413e; font-size: 11px; font-weight: 700; }
+.preview-heading small { margin-left: 5px; color: var(--muted); font-size: 9px; font-weight: 500; }
+.local-diagram-preview { margin: 0; border: 1px solid var(--line); background: white; }
+.local-diagram-preview figcaption { padding: 6px 8px; color: var(--muted); font-size: 9px; overflow-wrap: anywhere; }
+.open-original-pdf { min-height: 46px; display: flex; align-items: center; justify-content: space-between; margin: 0 8px 8px; padding: 0 10px; border: 1px solid var(--line); color: var(--green); font-size: 11px; font-weight: 700; text-decoration: none; }
+.open-original-pdf:hover { background: #edf4ed; }
+.local-diagram-preview img { display: block; width: 100%; max-height: 330px; object-fit: contain; }
+.official-product-facts { margin-top: 8px; padding: 8px; background: #f4f7f3; }
+.official-product-facts summary { color: var(--green-dark); cursor: pointer; font-size: 10px; font-weight: 700; }
+.official-product-facts dl { display: grid; gap: 5px; margin: 9px 0; }
+.official-product-facts dl div { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr); gap: 8px; font-size: 9px; }
+.official-product-facts dt { color: var(--muted); }
+.official-product-facts dd { margin: 0; color: #394742; font-weight: 600; }
+.official-product-facts > p { margin: 7px 0; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.official-links { display: flex; gap: 12px; font-size: 9px; }
+.official-links a { color: var(--green); font-weight: 700; }
 .download-button { width: 100%; min-height: 38px; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 15px; border: 1px solid #aebdb4; border-radius: 3px; background: transparent; color: var(--green-dark); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
 .download-button:hover { background: #edf4ed; }
 .text-field { margin: 0 0 15px; }
