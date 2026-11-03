@@ -207,6 +207,7 @@ export class App implements OnDestroy {
   protected readonly localDiagramPreviews = signal<LocalDiagramPreview[]>([]);
   protected readonly extracting = signal(false);
   protected readonly engineerSignoff = signal<'review_required' | 'reviewed' | 'approved'>('review_required');
+  protected readonly activeView = signal<'intake' | 'assessment'>('intake');
 
   protected async runAssessment(): Promise<void> {
     this.submitting.set(true);
@@ -252,6 +253,7 @@ export class App implements OnDestroy {
       }
 
       this.result.set(body as AssessmentResponse);
+      this.activeView.set('assessment');
     } catch (error) {
       this.errorMessage.set(
         error instanceof Error
@@ -434,8 +436,8 @@ export class App implements OnDestroy {
       diagramAvailable: true,
       ioListAvailable: true,
       observedComponentsText: 'V1 - valve manifold\nCY1 - guided actuator',
-      legacyPartNumbersText: 'KQ2T16-00A',
-      legacyComponentNamesText: 'Push-in T-connector',
+      legacyPartNumbersText: '',
+      legacyComponentNamesText: '',
       knownUnknownsText: 'Confirm valve fail state from as-built machine',
       currentQuoteHours: 12,
       estimatedQuoteHours: 8,
@@ -449,6 +451,7 @@ export class App implements OnDestroy {
   protected resetForm(): void {
     this.form = this.emptyForm();
     this.result.set(null);
+    this.activeView.set('intake');
     this.engineerSignoff.set('review_required');
     this.errorMessage.set('');
     this.selectedFiles.set([]);

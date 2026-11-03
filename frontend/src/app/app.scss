@@ -33,6 +33,14 @@ h1 { margin: 0; font-size: clamp(30px, 3vw, 38px); line-height: 1.05; font-weigh
 .stamp-label { display: block; margin-bottom: 5px; color: var(--amber); font-size: 9px; }
 .review-stamp strong { font-size: 12px; font-weight: 700; }
 .work-grid { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(340px, .92fr); gap: clamp(28px, 4vw, 56px); padding-top: 27px; }
+.workspace-tabs { display: flex; gap: 4px; margin-top: 24px; border-bottom: 1px solid var(--line); }
+.workspace-tabs button { position: relative; border: 0; border-bottom: 2px solid transparent; background: transparent; padding: 12px 18px; color: var(--muted); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.workspace-tabs button.active { border-bottom-color: var(--green); color: var(--green); }
+.tab-result-dot { display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--amber); }
+.work-grid > .intake-section { grid-column: 1 / -1; }
+.work-grid > .results-section { grid-column: 1 / -1; }
+.source-lines-table { min-width: 820px; }
+.source-lines-table small, .source-lines-table .source-line-status { display: block; color: var(--muted); font-size: 9px; }
 .intake-section, .results-section { min-width: 0; }
 .section-heading { min-height: 36px; display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }
 .section-heading > div { display: flex; align-items: center; gap: 11px; }

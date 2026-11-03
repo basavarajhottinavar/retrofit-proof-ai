@@ -24,7 +24,22 @@
       </div>
     </section>
 
+    <div class="workspace-tabs" role="tablist" aria-label="Assessment workspace">
+      <button type="button" role="tab" [class.active]="activeView() === 'intake'"
+        [attr.aria-selected]="activeView() === 'intake'" (click)="activeView.set('intake')">
+        Project information &amp; evidence
+      </button>
+      <button type="button" role="tab" [class.active]="activeView() === 'assessment'"
+        [attr.aria-selected]="activeView() === 'assessment'" (click)="activeView.set('assessment')">
+        Assessment output
+        @if (result()) {
+          <span class="tab-result-dot" aria-hidden="true"></span>
+        }
+      </button>
+    </div>
+
     <div class="work-grid">
+      @if (activeView() === 'intake') {
       <section class="intake-section" aria-labelledby="intake-title">
         <div class="section-heading">
           <div>
@@ -194,6 +209,7 @@
           <p class="demo-note">Demo values are illustrative. Replace them with approved case data.</p>
         </form>
       </section>
+      } @else {
 
       <aside class="results-section" aria-labelledby="results-title" aria-live="polite">
         <div class="section-heading result-heading">
@@ -365,34 +381,41 @@
                   @if (reconciliation.records.length) {
                     <details class="reference-query">
                       <summary>Review all {{ reconciliation.records.length }} source lines</summary>
-                      @for (record of reconciliation.records; track record.source_row) {
-                        <div class="reference-record">
-                          <div class="reference-query-heading">
-                            <strong>{{ record.legacy_part_number || 'No legacy code' }}</strong>
-                            <span>{{ statusLabel(record.diagram_match_status) }}</span>
-                          </div>
-                          <p class="reference-source">{{ record.description || 'No description' }} · {{ record.competitor || 'Manufacturer unknown' }}</p>
-                          <p class="reference-source">Festo reference: {{ record.festo_part_number || 'No part number listed' }}{{ record.festo_type_code ? ' · ' + record.festo_type_code : '' }} · {{ statusLabel(record.reference_status) }}</p>
-                          @if (record.source_remarks) {
-                            <p class="reference-warning">{{ record.source_remarks }}</p>
-                          }
-                          @if (record.found_in_crt_source_value) {
-                            <p class="reference-source">Raw FoundinCRT value: {{ record.found_in_crt_source_value }} (not sign-off)</p>
-                          }
-                          @if (record.official_festo_product; as product) {
-                            <details class="official-product-facts">
-                              <summary>Official Festo product facts · {{ product.product_name }}</summary>
-                              <dl>
-                                @for (fact of product.technical_data | keyvalue; track fact.key) {
-                                  <div><dt>{{ fact.key.replaceAll('_', ' ') }}</dt><dd>{{ fact.value }}</dd></div>
-                                }
-                              </dl>
-                              <p>{{ product.source_region }}. Retrieved {{ product.retrieved_on }}. Availability and compatibility are not verified for this application.</p>
-                              <div class="official-links"><a [href]="product.product_page" target="_blank" rel="noreferrer">Festo product page</a><a [href]="product.datasheet" target="_blank" rel="noreferrer">Festo datasheet</a></div>
-                            </details>
-                          }
-                        </div>
-                      }
+                      <div class="assessment-table-wrap source-lines-wrap">
+                        <table class="assessment-table source-lines-table">
+                          <thead>
+                            <tr>
+                              <th>Row</th>
+                              <th>Legacy part</th>
+                              <th>Description</th>
+                              <th>Manufacturer</th>
+                              <th>Festo reference</th>
+                              <th>Diagram match</th>
+                              <th>Review note</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (record of reconciliation.records; track record.source_row) {
+                              <tr>
+                                <td>{{ record.source_row }}</td>
+                                <td><strong>{{ record.legacy_part_number || '-' }}</strong></td>
+                                <td>{{ record.description || '-' }}</td>
+                                <td>{{ record.competitor || '-' }}</td>
+                                <td>
+                                  {{ record.festo_part_number || '-' }}
+                                  @if (record.festo_type_code) { <small>{{ record.festo_type_code }}</small> }
+                                  <span class="source-line-status">{{ statusLabel(record.reference_status) }}</span>
+                                </td>
+                                <td>{{ statusLabel(record.diagram_match_status) }}</td>
+                                <td>
+                                  @if (record.source_remarks) { <span>{{ record.source_remarks }}</span> }
+                                  @if (record.found_in_crt_source_value) { <small>Raw FoundinCRT: {{ record.found_in_crt_source_value }}</small> }
+                                </td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
                     </details>
                   }
                 </div>
@@ -494,6 +517,7 @@
           </div>
         }
       </aside>
+      }
     </div>
 
     <footer class="workspace-footer">
