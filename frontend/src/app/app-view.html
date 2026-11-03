@@ -224,18 +224,20 @@
 
         @if (result(); as assessment) {
           <div class="result-content">
-            <div class="result-block">
-              <h3>AI-assisted engineering review</h3>
-              <p>{{ assessment.ai_review.summary }}</p>
-              @if (assessment.ai_review.risks.length) {
-                <ul class="plain-list checklist">
-                  @for (risk of assessment.ai_review.risks; track $index) {
-                    <li>{{ risk }}</li>
-                  }
-                </ul>
-              }
-              <p class="reference-state">{{ assessment.ai_review.enabled ? assessment.ai_review.provider + ' assisted' : assessment.ai_review.provider }} · Review aid only; no engineering approval.</p>
-            </div>
+            @if (assessment.ai_review.enabled) {
+              <div class="result-block">
+                <h3>AI-assisted engineering review</h3>
+                <p>{{ assessment.ai_review.summary }}</p>
+                @if (assessment.ai_review.risks.length) {
+                  <ul class="plain-list checklist">
+                    @for (risk of assessment.ai_review.risks; track $index) {
+                      <li>{{ risk }}</li>
+                    }
+                  </ul>
+                }
+                <p class="reference-state">{{ assessment.ai_review.provider }} assisted · Review aid only; no engineering approval.</p>
+              </div>
+            }
             <div class="result-status" [class.incomplete]="assessment.status === 'information_incomplete'">
               <span class="status-dot"></span>
               <div>
