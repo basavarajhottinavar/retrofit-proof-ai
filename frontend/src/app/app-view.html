@@ -231,11 +231,16 @@
             @if (assessment.missing_information.length) {
               <div class="result-block">
                 <h3>Information to collect <span>{{ assessment.missing_information.length }}</span></h3>
-                <ul class="plain-list missing-list">
-                  @for (item of assessment.missing_information; track item) {
-                    <li>{{ item }}</li>
-                  }
-                </ul>
+                <div class="assessment-table-wrap">
+                  <table class="assessment-table">
+                    <thead><tr><th>#</th><th>Missing requirement</th><th>Status</th></tr></thead>
+                    <tbody>
+                      @for (item of assessment.missing_information; track item; let index = $index) {
+                        <tr><td>{{ index + 1 }}</td><td>{{ item }}</td><td><span class="table-status warning">Required</span></td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
               </div>
             }
 
@@ -253,25 +258,29 @@
                       <span>{{ lookup.found ? 'SOURCE ROW FOUND' : 'NO EXACT ENTRY' }}</span>
                     </div>
                     @if (lookup.found) {
-                      @for (record of lookup.records; track record.source_file + record.source_row) {
-                        <div class="reference-record">
-                          <p class="reference-family">{{ record.family_or_function || record.legacy_description || 'Reference row' }}</p>
-                          @if (record.technical_context['pilot_air_supply'] || record.technical_context['plug_socket'] || record.technical_context['voltage'] || record.technical_context['connection']) {
-                            <p class="reference-source">{{ record.technical_context['pilot_air_supply'] || '' }}{{ record.technical_context['plug_socket'] ? ' · ' + record.technical_context['plug_socket'] : '' }}{{ record.technical_context['voltage'] ? ' · ' + record.technical_context['voltage'] : '' }}{{ record.technical_context['connection'] ? ' · ' + record.technical_context['connection'] : '' }}</p>
-                          }
-                          @if (record.candidates.length) {
-                            <p class="reference-source">Alternatives listed in source</p>
-                            <ul class="reference-candidates">
-                              @for (candidate of record.candidates; track candidate.part_number + candidate.product_type) {
-                                <li><strong>{{ candidate.part_number }}</strong><span>{{ candidate.product_type || 'Part type not stated' }}</span><small>{{ candidate.note || 'Source contains no candidate note.' }}</small></li>
-                              }
-                            </ul>
-                          } @else {
-                            <p class="reference-source">No alternative part number is listed in this row.</p>
-                          }
-                          <p class="reference-warning">{{ record.review_notice }}</p>
-                        </div>
-                      }
+                      <div class="assessment-table-wrap">
+                        <table class="assessment-table reference-table">
+                          <thead><tr><th>Legacy reference</th><th>Family / function</th><th>Listed alternatives</th><th>Review</th></tr></thead>
+                          <tbody>
+                            @for (record of lookup.records; track record.source_file + record.source_row) {
+                              <tr>
+                                <td><strong>{{ lookup.query }}</strong></td>
+                                <td>{{ record.family_or_function || record.legacy_description || 'Not stated' }}</td>
+                                <td>
+                                  @if (record.candidates.length) {
+                                    @for (candidate of record.candidates; track candidate.part_number + candidate.product_type) {
+                                      <span class="table-chip">{{ candidate.part_number }}{{ candidate.product_type ? ' · ' + candidate.product_type : '' }}</span>
+                                    }
+                                  } @else {
+                                    None listed
+                                  }
+                                </td>
+                                <td><span class="table-status warning">Engineer review</span></td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
                     } @else {
                       <p class="reference-source">No exact legacy part number was found. No similar-part guess was made.</p>
                     }
@@ -294,17 +303,24 @@
                       <p class="reference-state">Showing the first 50 matching rows. Refine the name to narrow the results.</p>
                     }
                     @if (lookup.matches.length) {
+                      <div class="assessment-table-wrap">
+                        <table class="assessment-table crosswalk-table">
+                          <thead><tr><th>Legacy code</th><th>Description</th><th>Manufacturer</th><th>Festo reference</th><th>Status</th></tr></thead>
+                          <tbody>
+                            @for (match of lookup.matches; track match.source_file + match.source_row) {
+                              <tr>
+                                <td><strong>{{ match.legacy_part_number || 'Not listed' }}</strong></td>
+                                <td>{{ match.description || 'Not stated' }}</td>
+                                <td>{{ match.competitor || 'Unknown' }}</td>
+                                <td>{{ match.festo_part_number || 'Not listed' }}{{ match.festo_type_code ? ' · ' + match.festo_type_code : '' }}</td>
+                                <td><span class="table-status warning">{{ statusLabel(match.reference_status) }}</span></td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </div>
                       @for (match of lookup.matches; track match.source_file + match.source_row) {
                         <div class="reference-record">
-                          <p class="reference-family">{{ match.description || 'No description' }}</p>
-                          <p class="reference-source">Legacy code: {{ match.legacy_part_number || 'not listed' }} · {{ match.competitor || 'manufacturer unknown' }}</p>
-                          <div class="bom-notice">
-                            <div class="bom-topline"><span>Festo reference from source</span><strong>{{ statusLabel(match.reference_status) }}</strong></div>
-                            <p>{{ match.festo_part_number || 'No part number listed' }}{{ match.festo_type_code ? ' · ' + match.festo_type_code : '' }}</p>
-                          </div>
-                          @if (match.source_remarks) {
-                            <p class="reference-warning">{{ match.source_remarks }}</p>
-                          }
                           @if (match.official_festo_product; as product) {
                             <details class="official-product-facts">
                               <summary>Official Festo facts · {{ product.product_name }}</summary>
@@ -395,15 +411,23 @@
             <div class="result-block">
               <h3>Candidate BOM <span>{{ assessment.bom_preview.length }}</span></h3>
               @if (assessment.bom_preview.length) {
-                <ul class="plain-list checklist">
-                  @for (item of assessment.bom_preview; track $index) {
-                    <li>
-                      <strong>{{ item.legacy_part_number || 'Legacy item' }}</strong>
-                      -> {{ item.festo_part_number || 'Festo equivalent pending' }}{{ item.festo_type_code ? ' · ' + item.festo_type_code : '' }}
-                      · Qty {{ item.quantity }} · Engineer review required
-                    </li>
-                  }
-                </ul>
+                <div class="assessment-table-wrap">
+                  <table class="assessment-table bom-table">
+                    <thead><tr><th>Legacy part</th><th>Description</th><th>Festo part</th><th>Type code</th><th>Qty</th><th>Disposition</th></tr></thead>
+                    <tbody>
+                      @for (item of assessment.bom_preview; track $index) {
+                        <tr>
+                          <td><strong>{{ item.legacy_part_number || '-' }}</strong></td>
+                          <td>{{ item.description || '-' }}</td>
+                          <td>{{ item.festo_part_number || 'Pending' }}</td>
+                          <td>{{ item.festo_type_code || '-' }}</td>
+                          <td>{{ item.quantity }}</td>
+                          <td><span class="table-status warning">Engineer review</span></td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
               } @else {
                 <p>No legacy-to-Festo candidates are available for this intake.</p>
               }
@@ -415,13 +439,22 @@
 
             <div class="result-block">
               <h3>FAT / SAT validation plan <span>{{ assessment.validation_tests.length }}</span></h3>
-              @for (test of assessment.validation_tests; track test.test_id) {
-                <div class="reference-record">
-                  <strong>{{ test.phase }} · {{ test.test_id }} · {{ test.title }}</strong>
-                  <p>{{ test.acceptance_criteria }}</p>
-                  <p class="reference-warning">{{ test.safety_note }}</p>
-                </div>
-              }
+              <div class="assessment-table-wrap">
+                <table class="assessment-table validation-table">
+                  <thead><tr><th>Phase</th><th>ID</th><th>Test</th><th>Acceptance criteria</th><th>Safety note</th></tr></thead>
+                  <tbody>
+                    @for (test of assessment.validation_tests; track test.test_id) {
+                      <tr>
+                        <td><span class="table-status phase">{{ test.phase }}</span></td>
+                        <td>{{ test.test_id }}</td>
+                        <td><strong>{{ test.title }}</strong></td>
+                        <td>{{ test.acceptance_criteria }}</td>
+                        <td>{{ test.safety_note }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
               <button class="download-button" type="button" (click)="downloadValidationExcel()">
                 <span aria-hidden="true">↓</span> Download FAT / SAT validation plan
               </button>
