@@ -8,6 +8,7 @@ import ezdxf
 from pypdf import PdfReader
 from openpyxl import load_workbook
 from project_reconciliation import reconcile_project
+from gemini_document import extract_document_with_gemini
 
 MAX_DOCUMENT_BYTES = 12 * 1024 * 1024
 MAX_DOCUMENT_COUNT = 8
@@ -93,6 +94,19 @@ def _extract_pdf(filename: str, extension: str, content: bytes) -> dict[str, Any
     reconciliation = reconcile_project(filename, result["extracted_text"])
     if reconciliation is not None:
         result["metadata"]["project_reconciliation"] = reconciliation
+    try:
+        ai_analysis = extract_document_with_gemini(
+            content, "application/pdf", filename, result["extracted_text"]
+        )
+        if ai_analysis:
+            result["metadata"]["gemini_document_analysis"] = ai_analysis
+            reconciliation = reconcile_project(
+                filename, result["extracted_text"], ai_analysis=ai_analysis
+            )
+            if reconciliation is not None:
+                result["metadata"]["project_reconciliation"] = reconciliation
+    except Exception as exc:
+        result["metadata"]["gemini_document_analysis_error"] = type(exc).__name__
     return result
 
 
@@ -209,12 +223,28 @@ def extract_document(filename: str, content: bytes) -> dict[str, Any]:
         )
 
     if extension in SUPPORTED_IMAGE_TYPES:
-        return _bounded_result(
+        result = _bounded_result(
             safe_name,
             extension,
             "",
-            "Image accepted, but OCR is not enabled. Transcribe and verify it manually.",
+            "OCR is not enabled locally. Image requires verification. Gemini may extract visible callouts when configured; "
+            "OCR output is never treated as an engineering approval.",
         )
+        try:
+            ai_analysis = extract_document_with_gemini(
+                content, f"image/{'jpeg' if extension in {'.jpg', '.jpeg'} else extension.lstrip('.')}", safe_name
+            )
+            if ai_analysis:
+                result["status"] = "text_extracted"
+                result["extracted_text"] = "\n".join(
+                    f"{item.get('callout_no')}: {item.get('part_number')}"
+                    for item in ai_analysis.get("components", [])
+                    if item.get("callout_no") is not None and item.get("part_number")
+                )
+                result["metadata"]["gemini_document_analysis"] = ai_analysis
+        except Exception as exc:
+            result["metadata"]["gemini_document_analysis_error"] = type(exc).__name__
+        return result
     if extension not in SUPPORTED_TEXT_TYPES:
         return {
             "filename": safe_name,

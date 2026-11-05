@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 from io import BytesIO, StringIO
 
 import ezdxf
@@ -77,6 +78,26 @@ class DocumentIntakeTests(unittest.TestCase):
         self.assertEqual(result["status"], "extraction_error")
         self.assertEqual(result["extracted_text"], "")
         self.assertNotIn("Traceback", result["source_note"])
+
+    @patch("document_intake.extract_document_with_gemini")
+    def test_image_uses_gemini_analysis_without_becoming_an_approval(self, gemini_extract):
+        gemini_extract.return_value = {
+            "status": "ai_extracted",
+            "components": [{
+                "callout_no": 1,
+                "part_number": "KQ2T16-00A",
+                "confidence": 0.9,
+            }],
+        }
+
+        result = extract_document("diagram.png", b"image bytes")
+
+        self.assertEqual(result["status"], "text_extracted")
+        self.assertIn("KQ2T16-00A", result["extracted_text"])
+        self.assertEqual(
+            result["metadata"]["gemini_document_analysis"]["status"],
+            "ai_extracted",
+        )
 
 
 if __name__ == "__main__":

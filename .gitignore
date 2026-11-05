@@ -1,2 +1,6 @@
 # Local sample documents and approved catalog data
 /backend/data/
+
+# Local secrets
+.env
+backend/.env

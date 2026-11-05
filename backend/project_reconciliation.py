@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
+from gemini_document import suggest_festo_replacements
 
 DATA_DIR = Path(__file__).resolve().parent / "data" / "testing"
 OFFICIAL_FACTS_FILE = "festo_official_facts.json"
@@ -333,8 +334,115 @@ def _drawing_item_lines(text: str) -> dict[int, str]:
     return items
 
 
+def _component_code(component: dict[str, Any]) -> str | None:
+    description = str(component.get("description") or "")
+    # Prefer the manufacturer code printed in BOM descriptions (for example
+    # "cod. NPQM-L-Q10-E-P10") over customer/internal ERP codes.
+    match = re.search(
+        r"\bcod(?:ice)?\.?\s*[:=]?\s*([A-Z0-9][A-Z0-9./+-]*(?:-[A-Z0-9./+-]+)+)",
+        description,
+        re.IGNORECASE,
+    )
+    if match:
+        return match.group(1).strip()
+    supplied = _value_text(component.get("part_number"))
+    return supplied
+
+
+def _generic_ai_reconciliation(
+    filename: str,
+    data_dir: Path,
+    ai_analysis: dict[str, Any],
+) -> dict[str, Any]:
+    workbook_matches = []
+    for path in data_dir.glob("*.xlsx"):
+        status, records = _project_rows(path)
+        if status == "loaded":
+            workbook_matches.extend((path, record) for record in records)
+
+    official_facts = _official_product_facts(data_dir)
+    records = []
+    for component in ai_analysis.get("components", []):
+        legacy_code = _component_code(component)
+        description = _value_text(component.get("description"))
+        component_type = _value_text(component.get("component_type"))
+        normalized_code = _normalize_component_query(legacy_code or "")
+        normalized_description = _normalize_component_query(description or "")
+        workbook_record = None
+        match_type = "ai_extracted"
+
+        for _, source_record in workbook_matches:
+            source_code = _normalize_component_query(source_record["legacy_part_number"] or "")
+            source_description = _normalize_component_query(source_record["description"] or "")
+            if normalized_code and source_code and normalized_code == source_code:
+                workbook_record = source_record
+                match_type = "exact_workbook_part_number"
+                break
+            if normalized_description and source_description and normalized_description == source_description:
+                workbook_record = source_record
+                match_type = "exact_workbook_description"
+                break
+
+        record = {
+            "drawing_item": component.get("callout_no"),
+            "legacy_part_number": legacy_code,
+            "description": description,
+            "component_type": component_type,
+            "manufacturer": _value_text(component.get("manufacturer")),
+            "competitor": (
+                workbook_record["competitor"] if workbook_record else _value_text(component.get("manufacturer"))
+            ),
+            "festo_part_number": workbook_record["festo_part_number"] if workbook_record else None,
+            "festo_type_code": workbook_record["festo_type_code"] if workbook_record else None,
+            "source_file": workbook_record["source_file"] if workbook_record else None,
+            "source_sheet": workbook_record["source_sheet"] if workbook_record else None,
+            "source_row": workbook_record["source_row"] if workbook_record else None,
+            "source_remarks": workbook_record["source_remarks"] if workbook_record else None,
+            "reference_status": workbook_record["reference_status"] if workbook_record else match_type,
+            "match_type": match_type,
+            "diagram_item_text": legacy_code,
+            "diagram_match_status": match_type,
+            "requires_engineer_review": True,
+            "confidence": component.get("confidence"),
+            "review_notice": REVIEW_NOTICE,
+            "official_festo_product": _product_reference(
+                official_facts,
+                workbook_record["festo_part_number"] if workbook_record else None,
+                workbook_record["festo_type_code"] if workbook_record else None,
+            ),
+        }
+        records.append(record)
+
+    ai_suggestions = suggest_festo_replacements(records)
+    suggestions_by_code = {
+        suggestion.get("legacy_part_number"): suggestion
+        for suggestion in ai_suggestions
+        if suggestion.get("legacy_part_number")
+    }
+    for record in records:
+        suggestion = suggestions_by_code.get(record.get("legacy_part_number"))
+        if suggestion:
+            record["latest_festo_suggestion"] = suggestion
+
+    return {
+        "project_id": _normalize_project_key(filename) or None,
+        "status": "ai_text_reconciled" if records else "ai_unavailable",
+        "source_files": sorted({record["source_file"] for record in records if record["source_file"]}),
+        "source_sheet": None,
+        "source_signoff_present": False,
+        "total_source_lines": len(records),
+        "diagram_match_counts": {"ai_extracted": len(records)},
+        "gemini_festo_suggestions": ai_suggestions,
+        "records": records,
+        "review_notice": REVIEW_NOTICE,
+    }
+
+
 def reconcile_project(
-    filename: str, extracted_text: str, data_dir: Path = DATA_DIR
+    filename: str,
+    extracted_text: str,
+    data_dir: Path = DATA_DIR,
+    ai_analysis: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     project_id, workbooks, resolution_error = _matching_project_workbooks(
         filename, extracted_text, data_dir
@@ -348,16 +456,36 @@ def reconcile_project(
             "review_notice": REVIEW_NOTICE,
         }
     if not workbooks or project_id is None:
-        return None
+        return _generic_ai_reconciliation(filename, data_dir, ai_analysis) if ai_analysis else None
 
     records = [record for _, workbook_records in workbooks for record in workbook_records]
     official_facts = _official_product_facts(data_dir)
     item_lines = _drawing_item_lines(extracted_text)
     upper_text = extracted_text.upper()
+    ai_callouts: dict[int, str] = {}
+    if ai_analysis:
+        for raw_item, code in (ai_analysis.get("text_callouts") or {}).items():
+            try:
+                ai_callouts[int(raw_item)] = str(code).strip()
+            except (TypeError, ValueError):
+                continue
+        for component in ai_analysis.get("components", []):
+            item_number = component.get("callout_no")
+            code = component.get("part_number")
+            if item_number is not None and code:
+                try:
+                    ai_callouts.setdefault(int(item_number), str(code))
+                except (TypeError, ValueError):
+                    continue
+
     for record in records:
         item_number = record["drawing_item"]
         code = record["legacy_part_number"]
         item_text = item_lines.get(item_number) if item_number is not None else None
+        ai_item_text = ai_callouts.get(item_number) if item_number is not None else None
+        if ai_item_text and not item_text:
+            item_text = ai_item_text
+            record["diagram_item_text_source"] = "gemini_reconciled"
 
         if item_text and not code:
             diagram_status = "drawing_item_present_code_unavailable"
@@ -381,6 +509,17 @@ def reconcile_project(
             record["festo_type_code"],
         )
 
+    ai_suggestions = suggest_festo_replacements(records) if ai_analysis else []
+    suggestion_by_code = {
+        suggestion.get("legacy_part_number"): suggestion
+        for suggestion in ai_suggestions
+        if suggestion.get("legacy_part_number")
+    }
+    for record in records:
+        suggestion = suggestion_by_code.get(record.get("legacy_part_number"))
+        if suggestion:
+            record["latest_festo_suggestion"] = suggestion
+
     counts: dict[str, int] = {}
     for record in records:
         status = record["diagram_match_status"]
@@ -396,6 +535,7 @@ def reconcile_project(
         "official_product_facts_status": "loaded" if official_facts else "not_available",
         "official_product_facts_count": len(official_facts),
         "diagram_match_counts": counts,
+        "gemini_festo_suggestions": ai_suggestions,
         "records": records,
         "review_notice": REVIEW_NOTICE,
     }

@@ -47,7 +47,9 @@ This application is an engineering **review aid**, not an approval tool, sizing 
 - Optional AI review can summarize risks when `OPENAI_API_KEY` is configured. AI output is advisory and is not used for product approval.
 - The assessment always requires engineer review.
 
-No uploaded source document is retained by the application or sent to an external AI service. Local document extraction is performed by the backend.
+Uploaded source documents are processed in memory. When `GEMINI_API_KEY` or `GOOGLE_API_KEY` is configured,
+PDFs and images may be sent to Gemini for document reading, while local Excel reconciliation remains deterministic.
+Gemini suggestions are unverified alternatives and never replace engineering approval.
 
 ## Target customer use cases
 

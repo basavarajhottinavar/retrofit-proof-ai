@@ -115,6 +115,27 @@ class ProjectReconciliationTests(unittest.TestCase):
     def test_only_project_316_filename_uses_project_crosswalk(self):
         self.assertIsNone(reconcile_project("other.pdf", "1: VALVE-A", self.data_dir))
 
+    def test_ai_components_create_review_lines_for_unmatched_drawing(self):
+        result = reconcile_project(
+            "PS00473-Model.pdf",
+            "",
+            self.data_dir,
+            ai_analysis={
+                "components": [{
+                    "callout_no": 1,
+                    "part_number": "CRCFEST0017",
+                    "description": "PUSH-IN L-FITTING cod. NPQM-L-Q10-E-P10",
+                    "component_type": "PUSH-IN L-FITTING",
+                    "manufacturer": "Festo",
+                    "confidence": 0.95,
+                }],
+                "text_callouts": {},
+            },
+        )
+        self.assertEqual(result["status"], "ai_text_reconciled")
+        self.assertEqual(result["total_source_lines"], 1)
+        self.assertEqual(result["records"][0]["legacy_part_number"], "NPQM-L-Q10-E-P10")
+
     def test_missing_workbook_is_reported(self):
         empty_dir = Path(self.temp_dir.name) / "empty"
         empty_dir.mkdir()
