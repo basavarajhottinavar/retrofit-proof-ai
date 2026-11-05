@@ -208,6 +208,9 @@ py -m venv .venv
 py -m pip install -r requirements.txt
 py -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 ```
+.env file has to be made under backend and need to add below things
+GEMINI_API_KEY= (get it from ai google studio)
+GEMINI_MODEL=gemini-3.5-flash-lite
 
 ### Frontend
 
